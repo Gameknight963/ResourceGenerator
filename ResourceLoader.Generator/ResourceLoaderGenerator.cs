@@ -20,7 +20,7 @@ namespace ResourceLoader.Generator
         private const string LoaderBundleAttributeName = "ResourceLoader.Attributes.LoaderBundleAttribute";
         private const string HandlesExtensionsAttributeName = "ResourceLoader.Attributes.HandlesExtensionsAttribute";
         private const string WarnIfTransitiveAttributeName = "ResourceLoader.Attributes.WarnIfTransitiveAttribute";
-        private const string IResourceLoaderName = "ResourceLoader.Attributes.IResourceLoader<T>";
+        private const string IResourceLoaderName = "ResourceLoader.Core.IResourceLoader<T>";
 
         private static readonly DiagnosticDescriptor MissingProjectDir = new(
             "RL0001",

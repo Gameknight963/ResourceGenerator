@@ -70,6 +70,8 @@ namespace ResourceLoader.Tests
                         typeof(ResourceLoader.Attributes.ResourceFolderAttribute).Assembly.Location),
                     MetadataReference.CreateFromFile(
                         typeof(ResourceLoader.Defaults.BytesLoader).Assembly.Location),
+                    MetadataReference.CreateFromFile(
+                        typeof(ResourceLoader.Core.IResourceLoader<>).Assembly.Location),
                 });
         }
     }
