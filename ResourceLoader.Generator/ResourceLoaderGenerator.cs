@@ -198,6 +198,9 @@ namespace ResourceLoader.Generator
 
             foreach (string file in files)
             {
+                // skip dotfiles
+                if (Path.GetFileName(file).StartsWith(".")) continue;
+
                 string extension = Path.GetExtension(file).ToLowerInvariant();
                 string fileName = Path.GetFileNameWithoutExtension(file);
                 string fieldName = SanitizeName(fileName);
