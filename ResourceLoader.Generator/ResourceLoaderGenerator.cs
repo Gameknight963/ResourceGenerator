@@ -78,6 +78,15 @@ namespace ResourceLoader.Generator
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        private static readonly DiagnosticDescriptor LoaderOverrideRequired = new(
+            "RL0008",
+            "Loader override required",
+            "Loader '{0}' conflicts with a bundle loader for extension '{1}'. " +
+            "Use RegisterLoader(typeof({0}), overrideBundle: true) to override.",
+            "ResourceLoader",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             IncrementalValuesProvider<INamedTypeSymbol> classSymbols = context
@@ -349,15 +358,33 @@ namespace ResourceLoader.Generator
                 if (attr.AttributeClass?.ToDisplayString() == RegisterLoaderAttributeName)
                 {
                     if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol loaderType) continue;
-                    // Remove existing entry so RegisterLoader doesn't see a collision
-                    INamedTypeSymbol? tempLoader = loaderType;
-                    AttributeData? handlesAttr = tempLoader.GetAttributes().FirstOrDefault(a =>
+                    bool overrideBundle = (bool)(attr.ConstructorArguments[1].Value ?? false);
+
+                    AttributeData? handlesAttr = loaderType.GetAttributes().FirstOrDefault(a =>
                         a.AttributeClass?.ToDisplayString() == HandlesExtensionsAttributeName);
+
                     if (handlesAttr is not null)
                     {
+                        bool hasConflict = false;
                         foreach (string ext in handlesAttr.ConstructorArguments[0].Values.Select(v => (string)v.Value!))
-                            result.Remove(ext);
+                        {
+                            if (!result.ContainsKey(ext)) continue;
+
+                            if (overrideBundle)
+                                result.Remove(ext);
+                            else
+                            {
+                                ctx.ReportDiagnostic(Diagnostic.Create(
+                                    LoaderOverrideRequired,
+                                    Location.None,
+                                    loaderType.Name,
+                                    ext));
+                                hasConflict = true;
+                            }
+                        }
+                        if (hasConflict) continue;
                     }
+
                     RegisterLoader(loaderType, result, isTransitive: false, ctx);
                 }
             }

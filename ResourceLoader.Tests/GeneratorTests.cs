@@ -132,48 +132,85 @@ public sealed class GeneratorTests
     }
 
     [Fact]
-    public async Task DirectLoader_WinsOverBundleLoader_OnCollision()
+    public async Task DirectLoader_WithOverride_WinsOverBundleLoader()
     {
         string source = """
-        using ResourceLoader.Attributes;
+            using ResourceLoader.Attributes;
 
-        namespace TestNamespace;
+            namespace TestNamespace;
 
-        [HandlesExtensions(".txt")]
-        public class BundleTextLoader : IResourceLoader<string>
-        {
-            public string Load(string fullPath) => "bundle";
-        }
+            [HandlesExtensions(".txt")]
+            public class BundleTextLoader : IResourceLoader<string>
+            {
+                public string Load(string fullPath) => "bundle";
+            }
 
-        [HandlesExtensions(".txt")]
-        public class DirectTextLoader : IResourceLoader<int>
-        {
-            public int Load(string fullPath) => 0;
-        }
+            [HandlesExtensions(".txt")]
+            public class DirectTextLoader : IResourceLoader<int>
+            {
+                public int Load(string fullPath) => 0;
+            }
 
-        [LoaderBundle]
-        [RegisterLoader(typeof(BundleTextLoader))]
-        public sealed class TestBundleAttribute : System.Attribute { }
+            [LoaderBundle]
+            [RegisterLoader(typeof(BundleTextLoader))]
+            public sealed class TestBundleAttribute : System.Attribute { }
 
-        [ResourceFolder("Resources", nameof(_resources))]
-        [TestBundle]
-        [RegisterLoader(typeof(DirectTextLoader))]
-        public partial class TestMod
-        {
-            private static string _resources = "some/path";
-        }
+            [ResourceFolder("Resources", nameof(_resources))]
+            [TestBundle]
+            [RegisterLoader(typeof(DirectTextLoader), overrideBundle: true)]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
         """;
 
         (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) = await GeneratorTestHelper.RunGenerator(
             source,
             fileNames: new[] { "test.txt" });
 
-        // Should use DirectTextLoader (returns int), not BundleTextLoader (returns string)
         Assert.NotNull(generatedSource);
         Assert.Contains("int?", generatedSource);
         Assert.DoesNotContain("string?", generatedSource);
-
-        // No collision warning - direct loader silently overrides bundle
         Assert.DoesNotContain(diagnostics, d => d.Id == "RL0004");
+    }
+
+    [Fact]
+    public async Task DirectLoader_WithoutOverride_EmitsRL0008()
+    {
+        string source = """
+            using ResourceLoader.Attributes;
+
+            namespace TestNamespace;
+
+            [HandlesExtensions(".txt")]
+            public class BundleTextLoader : IResourceLoader<string>
+            {
+                public string Load(string fullPath) => "bundle";
+            }
+
+            [HandlesExtensions(".txt")]
+            public class DirectTextLoader : IResourceLoader<int>
+            {
+                public int Load(string fullPath) => 0;
+            }
+
+            [LoaderBundle]
+            [RegisterLoader(typeof(BundleTextLoader))]
+            public sealed class TestBundleAttribute : System.Attribute { }
+
+            [ResourceFolder("Resources", nameof(_resources))]
+            [TestBundle]
+            [RegisterLoader(typeof(DirectTextLoader))]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
+        """;
+
+        (ImmutableArray<Diagnostic> diagnostics, string? _) = await GeneratorTestHelper.RunGenerator(
+            source,
+            fileNames: new[] { "test.txt" });
+
+        Assert.Contains(diagnostics, d => d.Id == "RL0008");
     }
 }
