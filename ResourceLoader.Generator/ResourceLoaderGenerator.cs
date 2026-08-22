@@ -296,9 +296,9 @@ namespace ResourceLoader.Generator
             INamedTypeSymbol loaderType,
             Dictionary<string, LoaderInfo> result,
             bool isTransitive,
-            SourceProductionContext ctx)
+            SourceProductionContext ctx,
+            IEnumerable<string>? extensionOverride = null)
         {
-            // Find IResourceLoader<T> implementation
             INamedTypeSymbol? loaderInterface = loaderType.AllInterfaces.FirstOrDefault(i =>
                 i.IsGenericType &&
                 i.ConstructedFrom.ToDisplayString() == IResourceLoaderName);
@@ -311,20 +311,18 @@ namespace ResourceLoader.Generator
             bool warnIfTransitive = loaderType.GetAttributes().Any(a =>
                 a.AttributeClass?.ToDisplayString() == WarnIfTransitiveAttributeName);
 
-            // Find [HandlesExtensions]
             AttributeData? handlesAttr = loaderType.GetAttributes().FirstOrDefault(a =>
                 a.AttributeClass?.ToDisplayString() == HandlesExtensionsAttributeName);
 
             if (handlesAttr is null) return;
 
-            IEnumerable<string> extensions = handlesAttr.ConstructorArguments[0]
-                .Values.Select(v => (string)v.Value!);
+            IEnumerable<string> extensions = extensionOverride ??
+                handlesAttr.ConstructorArguments[0].Values.Select(v => (string)v.Value!);
 
             foreach (string ext in extensions)
             {
                 if (result.TryGetValue(ext, out LoaderInfo existing))
                 {
-                    // Collision - warn and keep existing (direct wins, then first bundle wins)
                     ctx.ReportDiagnostic(Diagnostic.Create(
                         LoaderCollision,
                         Location.None,
@@ -363,13 +361,13 @@ namespace ResourceLoader.Generator
                     AttributeData? handlesAttr = loaderType.GetAttributes().FirstOrDefault(a =>
                         a.AttributeClass?.ToDisplayString() == HandlesExtensionsAttributeName);
 
-                    if (handlesAttr is not null)
-                    {
-                        bool hasConflict = false;
-                        foreach (string ext in handlesAttr.ConstructorArguments[0].Values.Select(v => (string)v.Value!))
-                        {
-                            if (!result.ContainsKey(ext)) continue;
+                    if (handlesAttr is null) continue;
 
+                    List<string> allowedExtensions = new();
+                    foreach (string ext in handlesAttr.ConstructorArguments[0].Values.Select(v => (string)v.Value!))
+                    {
+                        if (result.ContainsKey(ext))
+                        {
                             if (overrideBundle)
                                 result.Remove(ext);
                             else
@@ -379,13 +377,14 @@ namespace ResourceLoader.Generator
                                     Location.None,
                                     loaderType.Name,
                                     ext));
-                                hasConflict = true;
+                                continue;
                             }
                         }
-                        if (hasConflict) continue;
+                        allowedExtensions.Add(ext);
                     }
 
-                    RegisterLoader(loaderType, result, isTransitive: false, ctx);
+                    if (allowedExtensions.Count > 0)
+                        RegisterLoader(loaderType, result, isTransitive: false, ctx, allowedExtensions);
                 }
             }
 
