@@ -130,4 +130,50 @@ public sealed class GeneratorTests
 
         Assert.Contains(diagnostics, d => d.Id == "RL0003");
     }
+
+    [Fact]
+    public async Task DirectLoader_WinsOverBundleLoader_OnCollision()
+    {
+        string source = """
+        using ResourceLoader.Attributes;
+
+        namespace TestNamespace;
+
+        [HandlesExtensions(".txt")]
+        public class BundleTextLoader : IResourceLoader<string>
+        {
+            public string Load(string fullPath) => "bundle";
+        }
+
+        [HandlesExtensions(".txt")]
+        public class DirectTextLoader : IResourceLoader<int>
+        {
+            public int Load(string fullPath) => 0;
+        }
+
+        [LoaderBundle]
+        [RegisterLoader(typeof(BundleTextLoader))]
+        public sealed class TestBundleAttribute : System.Attribute { }
+
+        [ResourceFolder("Resources", nameof(_resources))]
+        [TestBundle]
+        [RegisterLoader(typeof(DirectTextLoader))]
+        public partial class TestMod
+        {
+            private static string _resources = "some/path";
+        }
+        """;
+
+        (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) = await GeneratorTestHelper.RunGenerator(
+            source,
+            fileNames: new[] { "test.txt" });
+
+        // Should use DirectTextLoader (returns int), not BundleTextLoader (returns string)
+        Assert.NotNull(generatedSource);
+        Assert.Contains("System.Int32", generatedSource);
+        Assert.DoesNotContain("System.String", generatedSource);
+
+        // Should warn about collision
+        Assert.Contains(diagnostics, d => d.Id == "RL0004");
+    }
 }
