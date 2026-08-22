@@ -4,6 +4,7 @@
 		<IsRoslynComponent>true</IsRoslynComponent>
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
+		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
 	</PropertyGroup>
 
 	<ItemGroup>
