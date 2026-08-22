@@ -15,6 +15,62 @@ namespace ResourceLoader.Generator
             bool IsTransitive,
             bool WarnIfTransitive);
 
+        private static readonly DiagnosticDescriptor MissingProjectDir = new(
+            "RL0001",
+            "Could not determine project directory",
+            "ResourceLoader could not determine the project directory",
+            "ResourceLoader",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor ResourceFolderNotFound = new(
+            "RL0002",
+            "Resources folder not found",
+            "ResourceLoader could not find the folder '{0}'",
+            "ResourceLoader",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor NoLoaderRegistered = new(
+            "RL0003",
+            "No loader registered",
+            "No loader registered for extension '{0}' (file: '{1}')",
+            "ResourceLoader",
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor LoaderCollision = new(
+            "RL0004",
+            "Loader collision",
+            "Multiple loaders registered for extension '{0}': '{1}' and '{2}'. '{1}' will be used.",
+            "ResourceLoader",
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor TransitiveLoader = new(
+            "RL0005",
+            "Transitive loader",
+            "Loader '{0}' for file '{1}' was pulled in transitively. Consider registering it explicitly.",
+            "ResourceLoader",
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor RuntimePathNotStatic = new(
+            "RL0006",
+            "Runtime path member must be static",
+            "'{0}' must be static because generated resource properties are static",
+            "ResourceLoader",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor RuntimePathNotFound = new(
+            "RL0007",
+            "Runtime path member not found",
+            "Could not find member '{0}' on '{1}' or any of its base types",
+            "ResourceLoader",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             IncrementalValuesProvider<INamedTypeSymbol> classSymbols = context
@@ -62,15 +118,7 @@ namespace ResourceLoader.Generator
         {
             if (projectDir is null)
             {
-                ctx.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor(
-                        "RL0001",
-                        "Could not determine project directory",
-                        "ResourceLoader could not determine the project directory",
-                        "ResourceLoader",
-                        DiagnosticSeverity.Error,
-                        isEnabledByDefault: true),
-                    Location.None));
+                ctx.ReportDiagnostic(Diagnostic.Create(MissingProjectDir, Location.None));
                 return;
             }
 
@@ -93,13 +141,7 @@ namespace ResourceLoader.Generator
             if (runtimeSymbol is not null && !runtimeSymbol.IsStatic)
             {
                 ctx.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor(
-                        "RL0006",
-                        "Runtime path member must be static",
-                        "'{0}' must be static because generated resource properties are static",
-                        "ResourceLoader",
-                        DiagnosticSeverity.Error,
-                        isEnabledByDefault: true),
+                    RuntimePathNotStatic,
                     runtimeSymbol.Locations.FirstOrDefault() ?? Location.None,
                     runtimePath));
                 return;
@@ -107,13 +149,7 @@ namespace ResourceLoader.Generator
             else if (runtimeSymbol is null)
             {
                 ctx.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor(
-                        "RL0007",
-                        "Runtime path member not found",
-                        "Could not find member '{0}' on '{1}'.",
-                        "ResourceLoader",
-                        DiagnosticSeverity.Error,
-                        isEnabledByDefault: true),
+                    RuntimePathNotFound,
                     runtimePathLocation ?? Location.None,
                     runtimePath,
                     classSymbol.Name));
@@ -122,13 +158,7 @@ namespace ResourceLoader.Generator
             if (!Directory.Exists(fullScanPath))
             {
                 ctx.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor(
-                        "RL0002",
-                        "Resources folder not found",
-                        "ResourceLoader could not find the folder '{0}'",
-                        "ResourceLoader",
-                        DiagnosticSeverity.Error,
-                        isEnabledByDefault: true),
+                    ResourceFolderNotFound,
                     Location.None,
                     fullScanPath));
                 return;
@@ -158,13 +188,7 @@ namespace ResourceLoader.Generator
                 if (loader is null)
                 {
                     ctx.ReportDiagnostic(Diagnostic.Create(
-                        new DiagnosticDescriptor(
-                            "RL0003",
-                            "No loader registered",
-                            "No loader registered for extension '{0}' (file: '{1}')",
-                            "ResourceLoader",
-                            DiagnosticSeverity.Warning,
-                            isEnabledByDefault: true),
+                        NoLoaderRegistered,
                         Location.None,
                         extension,
                         fullFileName));
@@ -174,13 +198,7 @@ namespace ResourceLoader.Generator
                 if (loader.WarnIfTransitive && loader.IsTransitive)
                 {
                     ctx.ReportDiagnostic(Diagnostic.Create(
-                        new DiagnosticDescriptor(
-                            "RL0005",
-                            "Transitive loader",
-                            "Loader '{0}' for file '{1}' was pulled in transitively. Consider registering it explicitly.",
-                            "ResourceLoader",
-                            DiagnosticSeverity.Warning,
-                            isEnabledByDefault: true),
+                        TransitiveLoader,
                         Location.None,
                         loader.LoaderTypeName,
                         fullFileName));
@@ -291,13 +309,7 @@ namespace ResourceLoader.Generator
                 {
                     // Collision - warn and keep existing (direct wins, then first bundle wins)
                     ctx.ReportDiagnostic(Diagnostic.Create(
-                        new DiagnosticDescriptor(
-                            "RL0004",
-                            "Loader collision",
-                            "Multiple loaders registered for extension '{0}': '{1}' and '{2}'. '{1}' will be used.",
-                            "ResourceLoader",
-                            DiagnosticSeverity.Warning,
-                            isEnabledByDefault: true),
+                        LoaderCollision,
                         Location.None,
                         ext, existing.LoaderTypeName, loaderTypeName));
                     continue;
