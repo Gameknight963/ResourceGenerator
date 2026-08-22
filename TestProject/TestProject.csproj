@@ -9,6 +9,7 @@
   </PropertyGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\ResourceLoader.Defaults\ResourceLoader.Defaults.csproj" />
 		<ProjectReference Include="..\ResourceLoader.Generator\ResourceLoader.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\ResourceLoader.Attributes\ResourceLoader.Attributes.csproj" />
 	</ItemGroup>
