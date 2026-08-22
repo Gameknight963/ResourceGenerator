@@ -7,7 +7,7 @@ namespace TestProject
     [ResourceFolder("Resources", nameof(_resources))]
     internal partial class Program
     {
-        string _resources = "shit";
+        static string _resources = "shit";
         
         static void Main(string[] args)
         {
