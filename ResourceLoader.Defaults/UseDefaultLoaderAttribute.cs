@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ResourceLoader.Attributes
+namespace ResourceLoader.Defaults
 {
     [AttributeUsage(AttributeTargets.Class)]
     public sealed class UseDefaultLoadersAttribute : Attribute { }
