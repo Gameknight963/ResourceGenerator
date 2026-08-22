@@ -2,7 +2,7 @@
 
 namespace ResourceLoader.Attributes
 {
-    [AttributeUsage(AttributeTargets.Class)]
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
     public sealed class RegisterLoaderAttribute : Attribute
     {
         public Type LoaderType { get; }
