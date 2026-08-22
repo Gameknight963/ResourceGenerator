@@ -110,11 +110,14 @@ namespace ResourceLoader.Generator
             System.Text.StringBuilder fields = new();
             System.Text.StringBuilder loadCalls = new();
 
+            System.Text.StringBuilder properties = new();
+
             foreach (string file in files)
             {
                 string extension = Path.GetExtension(file).ToLowerInvariant();
                 string fileName = Path.GetFileNameWithoutExtension(file);
                 string fieldName = SanitizeName(fileName);
+                string backingFieldName = "_" + char.ToLower(fieldName[0]) + fieldName.Substring(1);
                 string? typeName = extension switch
                 {
                     ".png" or ".jpg" or ".jpeg" => "UnityEngine.Texture2D",
@@ -138,8 +141,13 @@ namespace ResourceLoader.Generator
                     continue;
                 }
 
-                fields.AppendLine($"    public {typeName} {fieldName} {{ get; private set; }}");
-                loadCalls.AppendLine($"        {fieldName} = Load{typeName.Split('.').Last()}({runtimePath}, \"{Path.GetFileName(file)}\");");
+                string loaderTypeName = typeName.Split('.').Last() + "Loader";
+                string fullFileName = Path.GetFileName(file);
+
+                properties.AppendLine($"    private {typeName}? {backingFieldName};");
+                properties.AppendLine($"    public {typeName} {fieldName} =>");
+                properties.AppendLine($"        {backingFieldName} ??= new {loaderTypeName}().Load(System.IO.Path.Combine({runtimePath}, \"{fullFileName}\"));");
+                properties.AppendLine();
             }
 
             string source = $$"""
@@ -148,11 +156,7 @@ namespace ResourceLoader.Generator
 
                 partial class {{className}}
                 {
-                {{fields}}
-                    private void LoadResources()
-                    {
-                {{loadCalls}}    }
-                }
+                {{properties}}}
                 """;
 
             ctx.AddSource($"{className}.g.cs", source);
