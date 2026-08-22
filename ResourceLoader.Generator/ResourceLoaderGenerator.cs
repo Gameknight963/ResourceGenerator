@@ -83,6 +83,42 @@ namespace ResourceLoader.Generator
             string runtimePath = (string)resourceFolderAttr.ConstructorArguments[1].Value!;
             string fullScanPath = Path.Combine(projectDir, scanPath);
 
+            Location runtimePathLocation = resourceFolderAttr.ApplicationSyntaxReference
+                ?.GetSyntax()
+                is AttributeSyntax attrSyntax
+                    ? attrSyntax.ArgumentList?.Arguments[1].GetLocation() ?? Location.None
+                    : Location.None;
+
+            ISymbol? runtimeSymbol = FindMember(classSymbol, runtimePath);
+            if (runtimeSymbol is not null && !runtimeSymbol.IsStatic)
+            {
+                ctx.ReportDiagnostic(Diagnostic.Create(
+                    new DiagnosticDescriptor(
+                        "RL0006",
+                        "Runtime path member must be static",
+                        "'{0}' must be static because generated resource properties are static",
+                        "ResourceLoader",
+                        DiagnosticSeverity.Error,
+                        isEnabledByDefault: true),
+                    runtimeSymbol.Locations.FirstOrDefault() ?? Location.None,
+                    runtimePath));
+                return;
+            }
+            else if (runtimeSymbol is null)
+            {
+                ctx.ReportDiagnostic(Diagnostic.Create(
+                    new DiagnosticDescriptor(
+                        "RL0007",
+                        "Runtime path member not found",
+                        "Could not find member '{0}' on '{1}'.",
+                        "ResourceLoader",
+                        DiagnosticSeverity.Error,
+                        isEnabledByDefault: true),
+                    runtimePathLocation ?? Location.None,
+                    runtimePath,
+                    classSymbol.Name));
+            }
+
             if (!Directory.Exists(fullScanPath))
             {
                 ctx.ReportDiagnostic(Diagnostic.Create(
@@ -172,8 +208,20 @@ namespace ResourceLoader.Generator
                 {{properties}}}
                 """;
 
-                    ctx.AddSource($"{className}.g.cs", source);
-                }
+            ctx.AddSource($"{className}.g.cs", source);
+        }
+
+        private static ISymbol? FindMember(INamedTypeSymbol classSymbol, string name)
+        {
+            INamedTypeSymbol? current = classSymbol;
+            while (current is not null)
+            {
+                ISymbol? member = current.GetMembers(name).FirstOrDefault();
+                if (member is not null) return member;
+                current = current.BaseType;
+            }
+            return null;
+        }
 
         private static string SanitizeName(string fileName)
         {
