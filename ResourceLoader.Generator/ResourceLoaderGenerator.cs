@@ -153,6 +153,12 @@ namespace ResourceLoader.Generator
                     ? attrSyntax.ArgumentList?.Arguments[1].GetLocation() ?? Location.None
                     : Location.None;
 
+            Location scanPathLocation = resourceFolderAttr.ApplicationSyntaxReference
+                ?.GetSyntax()
+                is AttributeSyntax attrSyntax2
+                    ? attrSyntax2.ArgumentList?.Arguments[0].GetLocation() ?? Location.None
+                    : Location.None;
+
             ISymbol? runtimeSymbol = FindMember(classSymbol, runtimePath);
             if (runtimeSymbol is not null && !runtimeSymbol.IsStatic)
             {
@@ -206,7 +212,7 @@ namespace ResourceLoader.Generator
                 {
                     ctx.ReportDiagnostic(Diagnostic.Create(
                         NoLoaderRegistered,
-                        Location.None,
+                        scanPathLocation, 
                         extension,
                         fullFileName));
                     continue;
@@ -216,7 +222,7 @@ namespace ResourceLoader.Generator
                 {
                     ctx.ReportDiagnostic(Diagnostic.Create(
                         TransitiveLoader,
-                        Location.None,
+                        scanPathLocation,
                         loader.LoaderTypeName,
                         fullFileName));
                 }
@@ -297,6 +303,7 @@ namespace ResourceLoader.Generator
             Dictionary<string, LoaderInfo> result,
             bool isTransitive,
             SourceProductionContext ctx,
+            Location registrationLocation,
             IEnumerable<string>? extensionOverride = null)
         {
             INamedTypeSymbol? loaderInterface = loaderType.AllInterfaces.FirstOrDefault(i =>
@@ -325,7 +332,7 @@ namespace ResourceLoader.Generator
                 {
                     ctx.ReportDiagnostic(Diagnostic.Create(
                         LoaderCollision,
-                        Location.None,
+                        registrationLocation,
                         ext, existing.LoaderTypeName, loaderTypeName));
                     continue;
                 }
@@ -383,8 +390,12 @@ namespace ResourceLoader.Generator
                         allowedExtensions.Add(ext);
                     }
 
+                    Location registerLocation = attr.ApplicationSyntaxReference
+                        ?.GetSyntax()
+                        ?.GetLocation() ?? Location.None;
+
                     if (allowedExtensions.Count > 0)
-                        RegisterLoader(loaderType, result, isTransitive: false, ctx, allowedExtensions);
+                        RegisterLoader(loaderType, result, isTransitive: false, ctx, registerLocation, allowedExtensions);
                 }
             }
 
@@ -410,7 +421,13 @@ namespace ResourceLoader.Generator
                     if (isBundleLoader)
                         ProcessBundle(loaderType, result, isTransitive: true, ctx);
                     else
-                        RegisterLoader(loaderType, result, isTransitive, ctx);
+                    {
+                        Location registerLocation = attr.ApplicationSyntaxReference
+                            ?.GetSyntax()
+                            ?.GetLocation() ?? Location.None;
+
+                        RegisterLoader(loaderType, result, isTransitive, ctx, registerLocation);
+                    }
                 }
             }
         }
