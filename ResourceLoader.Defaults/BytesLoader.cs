@@ -1,4 +1,5 @@
 ﻿using ResourceLoader.Attributes;
+using ResourceLoader.Core;
 using System.IO;
 
 namespace ResourceLoader.Defaults

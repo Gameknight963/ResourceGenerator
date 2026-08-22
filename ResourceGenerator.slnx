@@ -1,7 +1,8 @@
 <Solution>
-  <Project Path="ResourceLoader.Generator/ResourceLoader.Generator.csproj" />
   <Project Path="ResourceLoader.Attributes/ResourceLoader.Attributes.csproj" Id="6b4c4507-fc7f-43a1-9cab-8e0264d5b99a" />
+  <Project Path="ResourceLoader.Core/ResourceLoader.Core.csproj" Id="8b9e8bac-5d7f-4d05-ac97-3d09a4a372ae" />
   <Project Path="ResourceLoader.Defaults/ResourceLoader.Defaults.csproj" Id="a20c645e-b08f-4332-af55-94e126466100" />
+  <Project Path="ResourceLoader.Generator/ResourceLoader.Generator.csproj" />
   <Project Path="ResourceLoader.Tests/ResourceLoader.Tests.csproj" Id="56a41f39-ed3e-4a13-bedd-af794e648e5d" />
   <Project Path="TestProject/TestProject.csproj" Id="f86de473-b448-4fca-9247-9567bfa642f6" />
 </Solution>

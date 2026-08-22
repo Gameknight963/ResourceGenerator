@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ResourceLoader.Attributes\ResourceLoader.Attributes.csproj" />
+	<ProjectReference Include="..\ResourceLoader.Core\ResourceLoader.Core.csproj" />
   </ItemGroup>
 
 </Project>
