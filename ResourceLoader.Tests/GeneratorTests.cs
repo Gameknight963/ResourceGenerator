@@ -170,10 +170,10 @@ public sealed class GeneratorTests
 
         // Should use DirectTextLoader (returns int), not BundleTextLoader (returns string)
         Assert.NotNull(generatedSource);
-        Assert.Contains("System.Int32", generatedSource);
-        Assert.DoesNotContain("System.String", generatedSource);
+        Assert.Contains("int?", generatedSource);
+        Assert.DoesNotContain("string?", generatedSource);
 
-        // Should warn about collision
-        Assert.Contains(diagnostics, d => d.Id == "RL0004");
+        // No collision warning - direct loader silently overrides bundle
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RL0004");
     }
 }

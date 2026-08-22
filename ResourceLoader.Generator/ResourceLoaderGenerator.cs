@@ -333,19 +333,32 @@ namespace ResourceLoader.Generator
         {
             Dictionary<string, LoaderInfo> result = new();
 
-            // Collect direct [RegisterLoader] attributes
+            // First pass - bundles
+            foreach (AttributeData attr in classSymbol.GetAttributes())
+            {
+                if (attr.AttributeClass?.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString() == LoaderBundleAttributeName) == true)
+                {
+                    ProcessBundle(attr.AttributeClass!, result, isTransitive: false, ctx);
+                }
+            }
+
+            // Second pass - direct [RegisterLoader] attributes, overwriting bundle loaders
             foreach (AttributeData attr in classSymbol.GetAttributes())
             {
                 if (attr.AttributeClass?.ToDisplayString() == RegisterLoaderAttributeName)
                 {
                     if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol loaderType) continue;
+                    // Remove existing entry so RegisterLoader doesn't see a collision
+                    INamedTypeSymbol? tempLoader = loaderType;
+                    AttributeData? handlesAttr = tempLoader.GetAttributes().FirstOrDefault(a =>
+                        a.AttributeClass?.ToDisplayString() == HandlesExtensionsAttributeName);
+                    if (handlesAttr is not null)
+                    {
+                        foreach (string ext in handlesAttr.ConstructorArguments[0].Values.Select(v => (string)v.Value!))
+                            result.Remove(ext);
+                    }
                     RegisterLoader(loaderType, result, isTransitive: false, ctx);
-                }
-                // Check if it's a bundle attribute
-                else if (attr.AttributeClass?.GetAttributes().Any(a =>
-                    a.AttributeClass?.ToDisplayString() == LoaderBundleAttributeName) == true)
-                {
-                    ProcessBundle(attr.AttributeClass!, result, isTransitive: false, ctx);
                 }
             }
 
