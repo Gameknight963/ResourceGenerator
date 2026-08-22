@@ -1,9 +1,9 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Text;
+using System.IO;
+using System.Linq;
+
+
 
 namespace ResourceLoader.Generator
 {
@@ -12,8 +12,6 @@ namespace ResourceLoader.Generator
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            // Find all classes that have at least one attribute (cheap pre-filter)
-            // then check if any of those attributes is [ResourceFolder]
             IncrementalValuesProvider<ClassDeclarationSyntax> classDeclarations = context
                 .SyntaxProvider
                 .CreateSyntaxProvider(
@@ -21,11 +19,19 @@ namespace ResourceLoader.Generator
                     transform: static (ctx, _) => GetClassWithResourceFolder(ctx))
                 .Where(static c => c is not null)!;
 
-            // Combine with compilation so we can use semantic model later
-            IncrementalValueProvider<(Compilation, ImmutableArray<ClassDeclarationSyntax>)> combined =
-                context.CompilationProvider.Combine(classDeclarations.Collect());
+            IncrementalValueProvider<string?> projectDir = context
+                .AnalyzerConfigOptionsProvider
+                .Select(static (provider, _) =>
+                {
+                    provider.GlobalOptions.TryGetValue("build_property.projectdir", out string? dir);
+                    return dir;
+                });
 
-            context.RegisterSourceOutput(combined, static (ctx, source) => Execute(ctx, source.Item1, source.Item2));
+            IncrementalValuesProvider<(ClassDeclarationSyntax Class, string? ProjectDir)> combined =
+                classDeclarations.Combine(projectDir);
+
+            context.RegisterSourceOutput(combined, static (ctx, source) =>
+                Execute(ctx, source.Item1, source.Item2));
         }
 
         private static ClassDeclarationSyntax? GetClassWithResourceFolder(GeneratorSyntaxContext ctx)
@@ -50,29 +56,77 @@ namespace ResourceLoader.Generator
 
         private static void Execute(
             SourceProductionContext ctx,
-            Compilation compilation,
-            ImmutableArray<ClassDeclarationSyntax> classes)
+            ClassDeclarationSyntax classDecl,
+            string? projectDir)
         {
-            if (classes.IsDefaultOrEmpty) return;
-
-            foreach (ClassDeclarationSyntax classDecl in classes)
+            if (projectDir is null)
             {
-                // Just emit a comment for now to prove it works
-                string namespaceName = GetNamespace(classDecl);
-                string className = classDecl.Identifier.Text;
-
-                string source = $$"""
-                // ResourceLoaderGenerator found: {{namespaceName}}.{{className}}
-                """;
-
-                ctx.AddSource($"{className}.g.cs", source);
+                ctx.ReportDiagnostic(Diagnostic.Create(
+                    new DiagnosticDescriptor(
+                        "RL0001",
+                        "Could not determine project directory",
+                        "ResourceLoader could not determine the project directory",
+                        "ResourceLoader",
+                        DiagnosticSeverity.Error,
+                        isEnabledByDefault: true),
+                    Location.None));
+                return;
             }
+
+            // Get the ScanPath value from the attribute
+            AttributeSyntax? attribute = classDecl.AttributeLists
+                .SelectMany(al => al.Attributes)
+                .FirstOrDefault(a => a.Name.ToString().Contains("ResourceFolder"));
+
+            if (attribute?.ArgumentList?.Arguments.Count < 2)
+                return;
+
+            string scanPath = attribute!.ArgumentList!.Arguments[0]
+                .Expression.ToString().Trim('"');
+            string runtimePath = attribute.ArgumentList.Arguments[1]
+                .Expression.ToString().Trim('"');
+
+            string fullScanPath = Path.Combine(projectDir, scanPath);
+
+            if (!Directory.Exists(fullScanPath))
+            {
+                ctx.ReportDiagnostic(Diagnostic.Create(
+                    new DiagnosticDescriptor(
+                        "RL0002",
+                        "Resources folder not found",
+                        "ResourceLoader could not find the folder '{0}'",
+                        "ResourceLoader",
+                        DiagnosticSeverity.Error,
+                        isEnabledByDefault: true),
+                    Location.None,
+                    fullScanPath));
+                return;
+            }
+
+            string[] files = Directory.GetFiles(fullScanPath);
+            string className = classDecl.Identifier.Text;
+            string namespaceName = GetNamespace(classDecl);
+
+            // Just emit the file list as comments for now
+            string fileList = string.Join("\n", files.Select(f => $"// {Path.GetFileName(f)}"));
+
+            string source = $$"""
+            // <auto-generated/>
+            namespace {{namespaceName}};
+
+            partial class {{className}}
+            {
+            {{fileList}}
+            }
+            """;
+
+            ctx.AddSource($"{className}.g.cs", source);
         }
 
         private static string GetNamespace(ClassDeclarationSyntax classDecl)
         {
             SyntaxNode? parent = classDecl.Parent;
-            while (parent != null)
+            while (parent is not null)
             {
                 if (parent is NamespaceDeclarationSyntax ns)
                     return ns.Name.ToString();
