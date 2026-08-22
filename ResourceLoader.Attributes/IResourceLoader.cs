@@ -1,4 +1,4 @@
-﻿namespace ResourceLoader.Defaults
+﻿namespace ResourceLoader.Attributes
 {
     public interface IResourceLoader<T>
     {

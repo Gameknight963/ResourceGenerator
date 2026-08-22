@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ResourceLoader.Defaults
+namespace ResourceLoader.Attributes
 {
     [AttributeUsage(AttributeTargets.Class)]
     public class HandlesExtensionsAttribute : Attribute
