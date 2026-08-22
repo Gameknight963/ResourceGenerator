@@ -15,6 +15,13 @@ namespace ResourceLoader.Generator
             bool IsTransitive,
             bool WarnIfTransitive);
 
+        private const string ResourceFolderAttributeName = "ResourceLoader.Attributes.ResourceFolderAttribute";
+        private const string RegisterLoaderAttributeName = "ResourceLoader.Attributes.RegisterLoaderAttribute";
+        private const string LoaderBundleAttributeName = "ResourceLoader.Attributes.LoaderBundleAttribute";
+        private const string HandlesExtensionsAttributeName = "ResourceLoader.Attributes.HandlesExtensionsAttribute";
+        private const string WarnIfTransitiveAttributeName = "ResourceLoader.Attributes.WarnIfTransitiveAttribute";
+        private const string IResourceLoaderName = "ResourceLoader.Attributes.IResourceLoader<T>";
+
         private static readonly DiagnosticDescriptor MissingProjectDir = new(
             "RL0001",
             "Could not determine project directory",
@@ -104,7 +111,7 @@ namespace ResourceLoader.Generator
 
             foreach (AttributeData attr in classSymbol.GetAttributes())
             {
-                if (attr.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.ResourceFolderAttribute")
+                if (attr.AttributeClass?.ToDisplayString() == ResourceFolderAttributeName)
                     return classSymbol;
             }
 
@@ -123,7 +130,7 @@ namespace ResourceLoader.Generator
             }
 
             AttributeData? resourceFolderAttr = classSymbol.GetAttributes().FirstOrDefault(a =>
-                a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.ResourceFolderAttribute");
+                a.AttributeClass?.ToDisplayString() == ResourceFolderAttributeName);
 
             if (resourceFolderAttr is null) return;
 
@@ -153,6 +160,7 @@ namespace ResourceLoader.Generator
                     runtimePathLocation ?? Location.None,
                     runtimePath,
                     classSymbol.Name));
+                return;
             }
 
             if (!Directory.Exists(fullScanPath))
@@ -284,7 +292,7 @@ namespace ResourceLoader.Generator
             // Find IResourceLoader<T> implementation
             INamedTypeSymbol? loaderInterface = loaderType.AllInterfaces.FirstOrDefault(i =>
                 i.IsGenericType &&
-                i.ConstructedFrom.ToDisplayString() == "ResourceLoader.Attributes.IResourceLoader<T>");
+                i.ConstructedFrom.ToDisplayString() == IResourceLoaderName);
 
             if (loaderInterface is null) return;
 
@@ -292,11 +300,11 @@ namespace ResourceLoader.Generator
             string loaderTypeName = loaderType.ToDisplayString();
 
             bool warnIfTransitive = loaderType.GetAttributes().Any(a =>
-                a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.WarnIfTransitiveAttribute");
+                a.AttributeClass?.ToDisplayString() == WarnIfTransitiveAttributeName);
 
             // Find [HandlesExtensions]
             AttributeData? handlesAttr = loaderType.GetAttributes().FirstOrDefault(a =>
-                a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.HandlesExtensionsAttribute");
+                a.AttributeClass?.ToDisplayString() == HandlesExtensionsAttributeName);
 
             if (handlesAttr is null) return;
 
@@ -328,14 +336,14 @@ namespace ResourceLoader.Generator
             // Collect direct [RegisterLoader] attributes
             foreach (AttributeData attr in classSymbol.GetAttributes())
             {
-                if (attr.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.RegisterLoaderAttribute")
+                if (attr.AttributeClass?.ToDisplayString() == RegisterLoaderAttributeName)
                 {
                     if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol loaderType) continue;
                     RegisterLoader(loaderType, result, isTransitive: false, ctx);
                 }
                 // Check if it's a bundle attribute
                 else if (attr.AttributeClass?.GetAttributes().Any(a =>
-                    a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.LoaderBundleAttribute") == true)
+                    a.AttributeClass?.ToDisplayString() == LoaderBundleAttributeName) == true)
                 {
                     ProcessBundle(attr.AttributeClass!, result, isTransitive: false, ctx);
                 }
@@ -352,13 +360,13 @@ namespace ResourceLoader.Generator
         {
             foreach (AttributeData attr in bundleSymbol.GetAttributes())
             {
-                if (attr.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.RegisterLoaderAttribute")
+                if (attr.AttributeClass?.ToDisplayString() == RegisterLoaderAttributeName)
                 {
                     if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol loaderType) continue;
 
                     // Check if this loader is itself a bundle
                     bool isBundleLoader = loaderType.GetAttributes().Any(a =>
-                        a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.LoaderBundleAttribute");
+                        a.AttributeClass?.ToDisplayString() == LoaderBundleAttributeName);
 
                     if (isBundleLoader)
                         ProcessBundle(loaderType, result, isTransitive: true, ctx);
