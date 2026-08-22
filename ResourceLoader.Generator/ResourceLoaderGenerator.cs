@@ -1,23 +1,28 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-
-
 
 namespace ResourceLoader.Generator
 {
     [Generator]
     public sealed class ResourceLoaderGenerator : IIncrementalGenerator
     {
+        private sealed record LoaderInfo(
+            string LoaderTypeName,
+            string ReturnTypeName,
+            bool IsTransitive,
+            bool WarnIfTransitive);
+
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            IncrementalValuesProvider<ClassDeclarationSyntax> classDeclarations = context
+            IncrementalValuesProvider<INamedTypeSymbol> classSymbols = context
                 .SyntaxProvider
                 .CreateSyntaxProvider(
                     predicate: static (node, _) => node is ClassDeclarationSyntax c && c.AttributeLists.Count > 0,
                     transform: static (ctx, _) => GetClassWithResourceFolder(ctx))
-                .Where(static c => c is not null)!;
+                .Where(static s => s is not null)!;
 
             IncrementalValueProvider<string?> projectDir = context
                 .AnalyzerConfigOptionsProvider
@@ -27,28 +32,24 @@ namespace ResourceLoader.Generator
                     return dir;
                 });
 
-            IncrementalValuesProvider<(ClassDeclarationSyntax Class, string? ProjectDir)> combined =
-                classDeclarations.Combine(projectDir);
+            IncrementalValuesProvider<(INamedTypeSymbol Symbol, string? ProjectDir)> combined =
+                classSymbols.Combine(projectDir);
 
             context.RegisterSourceOutput(combined, static (ctx, source) =>
-                Execute(ctx, source.Item1, source.Item2));
+                Execute(ctx, source.Symbol, source.ProjectDir));
         }
 
-        private static ClassDeclarationSyntax? GetClassWithResourceFolder(GeneratorSyntaxContext ctx)
+        private static INamedTypeSymbol? GetClassWithResourceFolder(GeneratorSyntaxContext ctx)
         {
             ClassDeclarationSyntax classDecl = (ClassDeclarationSyntax)ctx.Node;
 
-            foreach (AttributeListSyntax attributeList in classDecl.AttributeLists)
-            {
-                foreach (AttributeSyntax attribute in attributeList.Attributes)
-                {
-                    if (ctx.SemanticModel.GetSymbolInfo(attribute).Symbol is not IMethodSymbol attributeSymbol)
-                        continue;
+            if (ctx.SemanticModel.GetDeclaredSymbol(classDecl) is not INamedTypeSymbol classSymbol)
+                return null;
 
-                    string fullName = attributeSymbol.ContainingType.ToDisplayString();
-                    if (fullName == "ResourceLoader.Attributes.ResourceFolderAttribute")
-                        return classDecl;
-                }
+            foreach (AttributeData attr in classSymbol.GetAttributes())
+            {
+                if (attr.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.ResourceFolderAttribute")
+                    return classSymbol;
             }
 
             return null;
@@ -56,7 +57,7 @@ namespace ResourceLoader.Generator
 
         private static void Execute(
             SourceProductionContext ctx,
-            ClassDeclarationSyntax classDecl,
+            INamedTypeSymbol classSymbol,
             string? projectDir)
         {
             if (projectDir is null)
@@ -73,19 +74,13 @@ namespace ResourceLoader.Generator
                 return;
             }
 
-            // Get the ScanPath value from the attribute
-            AttributeSyntax? attribute = classDecl.AttributeLists
-                .SelectMany(al => al.Attributes)
-                .FirstOrDefault(a => a.Name.ToString().Contains("ResourceFolder"));
+            AttributeData? resourceFolderAttr = classSymbol.GetAttributes().FirstOrDefault(a =>
+                a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.ResourceFolderAttribute");
 
-            if (attribute?.ArgumentList?.Arguments.Count < 2)
-                return;
+            if (resourceFolderAttr is null) return;
 
-            string scanPath = attribute!.ArgumentList!.Arguments[0]
-                .Expression.ToString().Trim('"');
-            string runtimePath = attribute.ArgumentList.Arguments[1]
-                .Expression.ToString().Trim('"');
-
+            string scanPath = (string)resourceFolderAttr.ConstructorArguments[0].Value!;
+            string runtimePath = (string)resourceFolderAttr.ConstructorArguments[1].Value!;
             string fullScanPath = Path.Combine(projectDir, scanPath);
 
             if (!Directory.Exists(fullScanPath))
@@ -103,13 +98,13 @@ namespace ResourceLoader.Generator
                 return;
             }
 
+            Dictionary<string, LoaderInfo> loaderMap = ResolveLoaders(classSymbol, ctx);
             string[] files = Directory.GetFiles(fullScanPath);
-            string className = classDecl.Identifier.Text;
-            string namespaceName = GetNamespace(classDecl);
+            string className = classSymbol.Name;
+            string namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 
-            System.Text.StringBuilder fields = new();
-            System.Text.StringBuilder loadCalls = new();
-
+            // Collect which loader types are actually used
+            HashSet<string> usedLoaders = new();
             System.Text.StringBuilder properties = new();
 
             foreach (string file in files)
@@ -118,49 +113,67 @@ namespace ResourceLoader.Generator
                 string fileName = Path.GetFileNameWithoutExtension(file);
                 string fieldName = SanitizeName(fileName);
                 string backingFieldName = "_" + char.ToLower(fieldName[0]) + fieldName.Substring(1);
-                string? typeName = extension switch
-                {
-                    ".png" or ".jpg" or ".jpeg" => "UnityEngine.Texture2D",
-                    ".mp3" or ".wav" or ".ogg" => "UnityEngine.AudioClip",
-                    _ => null
-                };
+                string fullFileName = Path.GetFileName(file);
 
-                if (typeName is null)
+                // Try specific extension first, then wildcard
+                if (!loaderMap.TryGetValue(extension, out LoaderInfo? loader))
+                    loaderMap.TryGetValue("*", out loader);
+
+                if (loader is null)
                 {
                     ctx.ReportDiagnostic(Diagnostic.Create(
                         new DiagnosticDescriptor(
                             "RL0003",
-                            "Unknown file extension",
+                            "No loader registered",
                             "No loader registered for extension '{0}' (file: '{1}')",
                             "ResourceLoader",
                             DiagnosticSeverity.Warning,
                             isEnabledByDefault: true),
                         Location.None,
                         extension,
-                        Path.GetFileName(file)));
+                        fullFileName));
                     continue;
                 }
 
-                string loaderTypeName = typeName.Split('.').Last() + "Loader";
-                string fullFileName = Path.GetFileName(file);
+                if (loader.WarnIfTransitive && loader.IsTransitive)
+                {
+                    ctx.ReportDiagnostic(Diagnostic.Create(
+                        new DiagnosticDescriptor(
+                            "RL0005",
+                            "Transitive loader",
+                            "Loader '{0}' for file '{1}' was pulled in transitively. Consider registering it explicitly.",
+                            "ResourceLoader",
+                            DiagnosticSeverity.Warning,
+                            isEnabledByDefault: true),
+                        Location.None,
+                        loader.LoaderTypeName,
+                        fullFileName));
+                }
 
-                properties.AppendLine($"    private {typeName}? {backingFieldName};");
-                properties.AppendLine($"    public {typeName} {fieldName} =>");
-                properties.AppendLine($"        {backingFieldName} ??= new {loaderTypeName}().Load(System.IO.Path.Combine({runtimePath}, \"{fullFileName}\"));");
+                usedLoaders.Add(loader.LoaderTypeName);
+
+                properties.AppendLine($"    private static {loader.ReturnTypeName}? {backingFieldName};");
+                properties.AppendLine($"    public static {loader.ReturnTypeName} {fieldName} =>");
+                properties.AppendLine($"        {backingFieldName} ??= _{GetLoaderFieldName(loader.LoaderTypeName)}.Load(System.IO.Path.Combine({runtimePath}, \"{fullFileName}\"));");
                 properties.AppendLine();
             }
 
+            // Emit static loader instances for each used loader
+            System.Text.StringBuilder loaderFields = new();
+            foreach (string loaderTypeName in usedLoaders)
+                loaderFields.AppendLine($"    private static readonly {loaderTypeName} _{GetLoaderFieldName(loaderTypeName)} = new {loaderTypeName}();");
+
             string source = $$"""
-                // <auto-generated/>
                 namespace {{namespaceName}};
 
                 partial class {{className}}
                 {
+                {{loaderFields}}
                 {{properties}}}
                 """;
 
-            ctx.AddSource($"{className}.g.cs", source);
-        }
+                    ctx.AddSource($"{className}.g.cs", source);
+                }
 
         private static string SanitizeName(string fileName)
         {
@@ -187,18 +200,109 @@ namespace ResourceLoader.Generator
             return sb.ToString();
         }
 
-        private static string GetNamespace(ClassDeclarationSyntax classDecl)
+        private static string GetLoaderFieldName(string fullyQualifiedTypeName)
         {
-            SyntaxNode? parent = classDecl.Parent;
-            while (parent is not null)
+            string simpleName = fullyQualifiedTypeName.Split('.').Last();
+            return char.ToLower(simpleName[0]) + simpleName.Substring(1);
+        }
+
+        private static void RegisterLoader(
+            INamedTypeSymbol loaderType,
+            Dictionary<string, LoaderInfo> result,
+            bool isTransitive,
+            SourceProductionContext ctx)
+        {
+            // Find IResourceLoader<T> implementation
+            INamedTypeSymbol? loaderInterface = loaderType.AllInterfaces.FirstOrDefault(i =>
+                i.IsGenericType &&
+                i.ConstructedFrom.ToDisplayString() == "ResourceLoader.Attributes.IResourceLoader<T>");
+
+            if (loaderInterface is null) return;
+
+            string returnTypeName = loaderInterface.TypeArguments[0].ToDisplayString();
+            string loaderTypeName = loaderType.ToDisplayString();
+
+            bool warnIfTransitive = loaderType.GetAttributes().Any(a =>
+                a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.WarnIfTransitiveAttribute");
+
+            // Find [HandlesExtensions]
+            AttributeData? handlesAttr = loaderType.GetAttributes().FirstOrDefault(a =>
+                a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.HandlesExtensionsAttribute");
+
+            if (handlesAttr is null) return;
+
+            IEnumerable<string> extensions = handlesAttr.ConstructorArguments[0]
+                .Values.Select(v => (string)v.Value!);
+
+            foreach (string ext in extensions)
             {
-                if (parent is NamespaceDeclarationSyntax ns)
-                    return ns.Name.ToString();
-                if (parent is FileScopedNamespaceDeclarationSyntax fns)
-                    return fns.Name.ToString();
-                parent = parent.Parent;
+                if (result.TryGetValue(ext, out LoaderInfo existing))
+                {
+                    // Collision - warn and keep existing (direct wins, then first bundle wins)
+                    ctx.ReportDiagnostic(Diagnostic.Create(
+                        new DiagnosticDescriptor(
+                            "RL0004",
+                            "Loader collision",
+                            "Multiple loaders registered for extension '{0}': '{1}' and '{2}'. '{1}' will be used.",
+                            "ResourceLoader",
+                            DiagnosticSeverity.Warning,
+                            isEnabledByDefault: true),
+                        Location.None,
+                        ext, existing.LoaderTypeName, loaderTypeName));
+                    continue;
+                }
+
+                result[ext] = new LoaderInfo(loaderTypeName, returnTypeName, isTransitive, warnIfTransitive);
             }
-            return "global";
+        }
+
+        private static Dictionary<string, LoaderInfo> ResolveLoaders(
+            INamedTypeSymbol classSymbol,
+            SourceProductionContext ctx)
+        {
+            Dictionary<string, LoaderInfo> result = new();
+
+            // Collect direct [RegisterLoader] attributes
+            foreach (AttributeData attr in classSymbol.GetAttributes())
+            {
+                if (attr.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.RegisterLoaderAttribute")
+                {
+                    if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol loaderType) continue;
+                    RegisterLoader(loaderType, result, isTransitive: false, ctx);
+                }
+                // Check if it's a bundle attribute
+                else if (attr.AttributeClass?.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.LoaderBundleAttribute") == true)
+                {
+                    ProcessBundle(attr.AttributeClass!, result, isTransitive: false, ctx);
+                }
+            }
+
+            return result;
+        }
+
+        private static void ProcessBundle(
+            INamedTypeSymbol bundleSymbol,
+            Dictionary<string, LoaderInfo> result,
+            bool isTransitive,
+            SourceProductionContext ctx)
+        {
+            foreach (AttributeData attr in bundleSymbol.GetAttributes())
+            {
+                if (attr.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.RegisterLoaderAttribute")
+                {
+                    if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol loaderType) continue;
+
+                    // Check if this loader is itself a bundle
+                    bool isBundleLoader = loaderType.GetAttributes().Any(a =>
+                        a.AttributeClass?.ToDisplayString() == "ResourceLoader.Attributes.LoaderBundleAttribute");
+
+                    if (isBundleLoader)
+                        ProcessBundle(loaderType, result, isTransitive: true, ctx);
+                    else
+                        RegisterLoader(loaderType, result, isTransitive, ctx);
+                }
+            }
         }
     }
 }
