@@ -12,5 +12,5 @@ using System.Diagnostics.CodeAnalysis;
     Scope = "member",
     Target = "~M:ResourceLoader.Generator.ResourceLoaderGenerator.Execute(" +
         "Microsoft.CodeAnalysis.SourceProductionContext," +
-        "Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax," +
+        "Microsoft.CodeAnalysis.INamedTypeSymbol," +
         "System.String)")]
