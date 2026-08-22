@@ -3,7 +3,7 @@
 namespace ResourceLoader.Attributes
 {
     [AttributeUsage(AttributeTargets.Class)]
-    public class HandlesExtensionsAttribute : Attribute
+    public sealed class HandlesExtensionsAttribute : Attribute
     {
         public string[] Extensions { get; }
 

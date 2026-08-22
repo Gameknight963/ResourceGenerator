@@ -3,7 +3,7 @@
 namespace ResourceLoader.Attributes
 {
     [AttributeUsage(AttributeTargets.Class)]
-    public class ResourceFolderAttribute : Attribute
+    public sealed class ResourceFolderAttribute : Attribute
     {
         public string ScanPath { get; }
         public string RuntimePath { get; }

@@ -3,5 +3,5 @@
 namespace ResourceLoader.Attributes
 {
     [AttributeUsage(AttributeTargets.Class)]
-    public class UseDefaultLoadersAttribute : Attribute { }
+    public sealed class UseDefaultLoadersAttribute : Attribute { }
 }
