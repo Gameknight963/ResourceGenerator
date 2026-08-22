@@ -1,7 +1,10 @@
-﻿using System;
+﻿using ResourceLoader.Attributes;
+using System;
 
 namespace ResourceLoader.Defaults
 {
-    [AttributeUsage(AttributeTargets.Class)]
+    [LoaderBundle]
+    [RegisterLoader(typeof(TextLoader))]
+    [RegisterLoader(typeof(BytesLoader))]
     public sealed class UseDefaultLoadersAttribute : Attribute { }
 }
