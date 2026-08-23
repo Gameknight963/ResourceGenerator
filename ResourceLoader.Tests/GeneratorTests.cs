@@ -392,4 +392,32 @@ public sealed class GeneratorTests
         Assert.Contains("Noextension", generatedSource);
         Assert.DoesNotContain(diagnostics, d => d.Id == "RL0003");
     }
+
+    [Fact]
+    public async Task FileNameCollision_EmitsDiagnostic()
+    {
+        string source = """
+            using ResourceLoader.Attributes;
+            using ResourceLoader.Defaults;
+
+            namespace TestNamespace;
+
+            [ResourceFolder("Resources", nameof(_resources))]
+            [UseDefaultLoaders]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
+        """;
+
+        (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) = await GeneratorTestHelper.RunGenerator(
+            source,
+            fileNames: new[] { "foo.txt", "foo.json" });
+
+        // Should not emit duplicate properties
+        Assert.DoesNotContain("public static string Foo =>", generatedSource);
+        // Should emit a diagnostic explaining the collision
+        // (we don't have an RL code for this yet)
+        Assert.Contains(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+    }
 }
