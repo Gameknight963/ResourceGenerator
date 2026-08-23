@@ -5,4 +5,8 @@
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ResourceLoader.Core\ResourceLoader.Core.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -474,4 +474,106 @@ public sealed class GeneratorTests
         Assert.Contains("public static class Sub", generatedSource);
         Assert.Contains("Nested", generatedSource);
     }
+
+    [Fact]
+    public async Task NonCachingLoader_DoesNotGenerateBackingFieldOrCacheResult()
+    {
+        string source = """
+            using ResourceLoader.Attributes;
+            using ResourceLoader.Core;
+
+            namespace TestNamespace;
+
+            [HandlesExtensions(".txt")]
+            [NonCaching]
+            public class TextLoader : IResourceLoader<string>
+            {
+                public string Load(string fullPath) => string.Empty;
+            }
+
+            [ResourceFolder("Resources", nameof(_resources))]
+            [RegisterLoader(typeof(TextLoader))]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
+            """;
+
+        (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) =
+            await GeneratorTestHelper.RunGenerator(
+                source,
+                fileNames: new[] { "test.txt" });
+
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        Assert.NotNull(generatedSource);
+
+        // The property directly calls Load()
+        Assert.Contains(
+            "public static string Test =>",
+            generatedSource);
+
+        Assert.Contains(
+            "__rl_textLoader.Load(System.IO.Path.Combine(_resources, \"test.txt\"))",
+            generatedSource);
+
+        // A non-caching loader must not have a backing field
+        Assert.DoesNotContain(
+            "private static string? _test;",
+            generatedSource);
+
+        // It must not cache the result with ??=
+        Assert.DoesNotContain("_test ??=", generatedSource);
+    }
+
+    [Fact]
+    public async Task NormalLoader_GeneratesCachedBackingField()
+    {
+        string source = """
+            using ResourceLoader.Attributes;
+            using ResourceLoader.Core;
+
+            namespace TestNamespace;
+
+            [HandlesExtensions(".txt")]
+            public class TextLoader : IResourceLoader<string>
+            {
+                public string Load(string fullPath) => string.Empty;
+            }
+
+            [ResourceFolder("Resources", nameof(_resources))]
+            [RegisterLoader(typeof(TextLoader))]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
+        """;
+
+        (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) =
+            await GeneratorTestHelper.RunGenerator(
+                source,
+                fileNames: new[] { "test.txt" });
+
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        Assert.NotNull(generatedSource);
+
+        // Should have a backing field
+        Assert.Contains(
+            "private static string? _test;",
+            generatedSource);
+
+        Assert.Contains(
+            "public static string Test =>",
+            generatedSource);
+
+        // Should use ??= to use that backing field
+        Assert.Contains(
+            "_test ??=",
+            generatedSource);
+
+        Assert.Contains(
+            "__rl_textLoader.Load(System.IO.Path.Combine(_resources, \"test.txt\"))",
+            generatedSource);
+    }
 }

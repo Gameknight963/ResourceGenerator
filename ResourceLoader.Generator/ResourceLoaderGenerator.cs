@@ -13,13 +13,15 @@ namespace ResourceLoader.Generator
             string LoaderTypeName,
             string ReturnTypeName,
             bool IsTransitive,
-            bool WarnIfTransitive);
+            bool WarnIfTransitive,
+            bool NonCaching);
 
         private const string ResourceFolderAttributeName = "ResourceLoader.Attributes.ResourceFolderAttribute";
         private const string RegisterLoaderAttributeName = "ResourceLoader.Attributes.RegisterLoaderAttribute";
         private const string LoaderBundleAttributeName = "ResourceLoader.Attributes.LoaderBundleAttribute";
         private const string HandlesExtensionsAttributeName = "ResourceLoader.Attributes.HandlesExtensionsAttribute";
         private const string WarnIfTransitiveAttributeName = "ResourceLoader.Attributes.WarnIfTransitiveAttribute";
+        private const string NonCachingAttributeName = "ResourceLoader.Attributes.NonCachingAttribute";
         private const string IResourceLoaderName = "ResourceLoader.Core.IResourceLoader<T>";
 
         private static readonly DiagnosticDescriptor MissingProjectDir = new(
@@ -312,12 +314,27 @@ namespace ResourceLoader.Generator
                 usedLoaders.Add(loader.LoaderTypeName);
 
                 string loaderField = $"__rl_{GetLoaderFieldName(loader.LoaderTypeName)}";
+
                 properties.AppendLine($"{indent}[global::System.Runtime.CompilerServices.CompilerGenerated]");
                 properties.AppendLine($"{indent}[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
-                properties.AppendLine($"{indent}private static {loader.ReturnTypeName}? __rl_{backingFieldName};");
-                
-                properties.AppendLine($"{indent}public static {loader.ReturnTypeName} {fieldName} =>");
-                properties.AppendLine($"{indent}    __rl_{backingFieldName} ??= {loaderField}.Load(System.IO.Path.Combine({runtimePath}, \"{fullFileName}\"));");
+
+                if (loader.NonCaching)
+                {
+                    properties.AppendLine(
+                        $"{indent}public static {loader.ReturnTypeName} {fieldName} =>");
+                    properties.AppendLine(
+                        $"{indent}    {loaderField}.Load(System.IO.Path.Combine({runtimePath}, \"{fullFileName}\"));");
+                }
+                else
+                {
+                    properties.AppendLine(
+                        $"{indent}private static {loader.ReturnTypeName}? {backingFieldName};");
+                    properties.AppendLine(
+                        $"{indent}public static {loader.ReturnTypeName} {fieldName} =>");
+                    properties.AppendLine(
+                        $"{indent}    {backingFieldName} ??= {loaderField}.Load(System.IO.Path.Combine({runtimePath}, \"{fullFileName}\"));");
+                }
+
                 properties.AppendLine();
             }
         }
@@ -406,6 +423,9 @@ namespace ResourceLoader.Generator
             bool warnIfTransitive = loaderType.GetAttributes().Any(a =>
                 a.AttributeClass?.ToDisplayString() == WarnIfTransitiveAttributeName);
 
+            bool nonCaching = loaderType.GetAttributes().Any(a =>
+                a.AttributeClass?.ToDisplayString() == NonCachingAttributeName);
+
             AttributeData? handlesAttr = loaderType.GetAttributes().FirstOrDefault(a =>
                 a.AttributeClass?.ToDisplayString() == HandlesExtensionsAttributeName);
 
@@ -425,7 +445,7 @@ namespace ResourceLoader.Generator
                     continue;
                 }
 
-                result[ext] = new LoaderInfo(loaderTypeName, returnTypeName, isTransitive, warnIfTransitive);
+                result[ext] = new LoaderInfo(loaderTypeName, returnTypeName, isTransitive, warnIfTransitive, nonCaching);
             }
         }
 
