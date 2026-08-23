@@ -221,32 +221,32 @@ public sealed class GeneratorTests
     public async Task TransitiveLoader_WithWarnIfTransitive_EmitsRL0005()
     {
         string source = """
-        using ResourceLoader.Attributes;
-        using ResourceLoader.Core;
+            using ResourceLoader.Attributes;
+            using ResourceLoader.Core;
 
-        namespace TestNamespace;
+            namespace TestNamespace;
 
-        [HandlesExtensions(".txt")]
-        [WarnIfTransitive]
-        public class InnerTextLoader : IResourceLoader<string>
-        {
-            public string Load(string fullPath) => string.Empty;
-        }
+            [HandlesExtensions(".txt")]
+            [WarnIfTransitive]
+            public class InnerTextLoader : IResourceLoader<string>
+            {
+                public string Load(string fullPath) => string.Empty;
+            }
 
-        [LoaderBundle]
-        [RegisterLoader(typeof(InnerTextLoader))]
-        public sealed class InnerBundleAttribute : System.Attribute { }
+            [LoaderBundle]
+            [RegisterLoader(typeof(InnerTextLoader))]
+            public sealed class InnerBundleAttribute : System.Attribute { }
 
-        [LoaderBundle]
-        [RegisterLoader(typeof(InnerBundleAttribute))]
-        public sealed class OuterBundleAttribute : System.Attribute { }
+            [LoaderBundle]
+            [RegisterLoader(typeof(InnerBundleAttribute))]
+            public sealed class OuterBundleAttribute : System.Attribute { }
 
-        [ResourceFolder("Resources", nameof(_resources))]
-        [OuterBundle]
-        public partial class TestMod
-        {
-            private static string _resources = "some/path";
-        }
+            [ResourceFolder("Resources", nameof(_resources))]
+            [OuterBundle]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
         """;
 
         (ImmutableArray<Diagnostic> diagnostics, string? _) = await GeneratorTestHelper.RunGenerator(
@@ -260,31 +260,31 @@ public sealed class GeneratorTests
     public async Task TransitiveLoader_WithoutWarnIfTransitive_NoRL0005()
     {
         string source = """
-        using ResourceLoader.Attributes;
-        using ResourceLoader.Core;
+            using ResourceLoader.Attributes;
+            using ResourceLoader.Core;
 
-        namespace TestNamespace;
+            namespace TestNamespace;
 
-        [HandlesExtensions(".txt")]
-        public class InnerTextLoader : IResourceLoader<string>
-        {
-            public string Load(string fullPath) => string.Empty;
-        }
+            [HandlesExtensions(".txt")]
+            public class InnerTextLoader : IResourceLoader<string>
+            {
+                public string Load(string fullPath) => string.Empty;
+            }
 
-        [LoaderBundle]
-        [RegisterLoader(typeof(InnerTextLoader))]
-        public sealed class InnerBundleAttribute : System.Attribute { }
+            [LoaderBundle]
+            [RegisterLoader(typeof(InnerTextLoader))]
+            public sealed class InnerBundleAttribute : System.Attribute { }
 
-        [LoaderBundle]
-        [RegisterLoader(typeof(InnerBundleAttribute))]
-        public sealed class OuterBundleAttribute : System.Attribute { }
+            [LoaderBundle]
+            [RegisterLoader(typeof(InnerBundleAttribute))]
+            public sealed class OuterBundleAttribute : System.Attribute { }
 
-        [ResourceFolder("Resources", nameof(_resources))]
-        [OuterBundle]
-        public partial class TestMod
-        {
-            private static string _resources = "some/path";
-        }
+            [ResourceFolder("Resources", nameof(_resources))]
+            [OuterBundle]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
         """;
 
         (ImmutableArray<Diagnostic> diagnostics, string? _) = await GeneratorTestHelper.RunGenerator(
@@ -298,34 +298,34 @@ public sealed class GeneratorTests
     public async Task DirectLoader_WithoutOverride_PartialConflict_EmitsRL0008ForConflictingExtensionOnly()
     {
         string source = """
-        using ResourceLoader.Attributes;
-        using ResourceLoader.Core;
+            using ResourceLoader.Attributes;
+            using ResourceLoader.Core;
 
-        namespace TestNamespace;
+            namespace TestNamespace;
 
-        [HandlesExtensions(".txt")]
-        public class BundleTextLoader : IResourceLoader<string>
-        {
-            public string Load(string fullPath) => string.Empty;
-        }
+            [HandlesExtensions(".txt")]
+            public class BundleTextLoader : IResourceLoader<string>
+            {
+                public string Load(string fullPath) => string.Empty;
+            }
 
-        [HandlesExtensions(".txt", ".md")]
-        public class DirectTextLoader : IResourceLoader<int>
-        {
-            public int Load(string fullPath) => 0;
-        }
+            [HandlesExtensions(".txt", ".md")]
+            public class DirectTextLoader : IResourceLoader<int>
+            {
+                public int Load(string fullPath) => 0;
+            }
 
-        [LoaderBundle]
-        [RegisterLoader(typeof(BundleTextLoader))]
-        public sealed class TestBundleAttribute : System.Attribute { }
+            [LoaderBundle]
+            [RegisterLoader(typeof(BundleTextLoader))]
+            public sealed class TestBundleAttribute : System.Attribute { }
 
-        [ResourceFolder("Resources", nameof(_resources))]
-        [TestBundle]
-        [RegisterLoader(typeof(DirectTextLoader))]
-        public partial class TestMod
-        {
-            private static string _resources = "some/path";
-        }
+            [ResourceFolder("Resources", nameof(_resources))]
+            [TestBundle]
+            [RegisterLoader(typeof(DirectTextLoader))]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
         """;
 
         (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) = await GeneratorTestHelper.RunGenerator(
@@ -338,5 +338,58 @@ public sealed class GeneratorTests
         // .md should still be generated since no conflict there
         Assert.NotNull(generatedSource);
         Assert.Contains("Readme", generatedSource);
+    }
+
+    [Fact]
+    public async Task HiddenFiles_AreSkipped()
+    {
+        string source = """
+            using ResourceLoader.Attributes;
+            using ResourceLoader.Defaults;
+
+            namespace TestNamespace;
+
+            [ResourceFolder("Resources", nameof(_resources))]
+            [UseDefaultLoaders]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
+        """;
+
+        (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) = await GeneratorTestHelper.RunGenerator(
+            source,
+            fileNames: new[] { ".hidden", "visible.txt" });
+
+        Assert.NotNull(generatedSource);
+        Assert.DoesNotContain("Hidden", generatedSource);
+        Assert.Contains("Visible", generatedSource);
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RL0003" && d.GetMessage().Contains(".hidden"));
+    }
+
+    [Fact]
+    public async Task FileWithNoExtension_IsHandledByWildcardLoader()
+    {
+        string source = """
+        using ResourceLoader.Attributes;
+        using ResourceLoader.Defaults;
+
+        namespace TestNamespace;
+
+        [ResourceFolder("Resources", nameof(_resources))]
+        [UseDefaultLoaders]
+        public partial class TestMod
+        {
+            private static string _resources = "some/path";
+        }
+        """;
+
+        (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) = await GeneratorTestHelper.RunGenerator(
+            source,
+            fileNames: new[] { "noextension" });
+
+        Assert.NotNull(generatedSource);
+        Assert.Contains("Noextension", generatedSource);
+        Assert.DoesNotContain(diagnostics, d => d.Id == "RL0003");
     }
 }
