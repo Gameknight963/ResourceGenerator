@@ -14,3 +14,8 @@ using System.Diagnostics.CodeAnalysis;
         "Microsoft.CodeAnalysis.SourceProductionContext," +
         "Microsoft.CodeAnalysis.INamedTypeSymbol," +
         "System.String)")]
+
+[assembly: SuppressMessage("MicrosoftCodeAnalysisCorrectness", "RS1035:Do not use APIs banned for analyzers", Justification = "File IO is intentional in this analyzer", Scope = "member", 
+    Target = "~M:ResourceLoader.Generator.ResourceLoaderGenerator.GetFiles" +
+    "(System.String,System.Boolean)~" +
+    "System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String}}")]

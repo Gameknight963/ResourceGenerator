@@ -456,7 +456,7 @@ public sealed class GeneratorTests
 
             namespace TestNamespace;
 
-            [ResourceFolder("Resources", nameof(_resources), Recursive = true)]
+            [ResourceFolder("Resources", nameof(_resources), recursive: true)]
             [UseDefaultLoaders]
             public partial class TestMod
             {
