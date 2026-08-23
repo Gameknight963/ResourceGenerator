@@ -5,7 +5,6 @@ namespace ResourceLoader.Tests;
 
 public sealed class GeneratorTests
 {
-
     [Fact]
     public async Task HappyPath_GeneratesPropertiesForKnownExtensions()
     {
@@ -419,5 +418,60 @@ public sealed class GeneratorTests
 
         // should emit RL0009
         Assert.Contains(diagnostics, d => d.Id == "RL0009");
+    }
+
+    [Fact]
+    public async Task SubdirectoryFiles_NotIncluded_WhenNotRecursive()
+    {
+        string source = """
+            using ResourceLoader.Attributes;
+            using ResourceLoader.Defaults;
+
+            namespace TestNamespace;
+
+            [ResourceFolder("Resources", nameof(_resources))]
+            [UseDefaultLoaders]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
+        """;
+
+        (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) = await GeneratorTestHelper.RunGenerator(
+            source,
+            fileNames: new[] { "top.txt" },
+            subDirectoryFiles: new Dictionary<string, string[]> { { "sub", new[] { "nested.txt" } } });
+
+        Assert.NotNull(generatedSource);
+        Assert.Contains("Top", generatedSource);
+        Assert.DoesNotContain("Nested", generatedSource);
+    }
+
+    [Fact]
+    public async Task SubdirectoryFiles_GenerateNestedClasses_WhenRecursive()
+    {
+        string source = """
+            using ResourceLoader.Attributes;
+            using ResourceLoader.Defaults;
+
+            namespace TestNamespace;
+
+            [ResourceFolder("Resources", nameof(_resources), Recursive = true)]
+            [UseDefaultLoaders]
+            public partial class TestMod
+            {
+                private static string _resources = "some/path";
+            }
+        """;
+
+        (ImmutableArray<Diagnostic> diagnostics, string? generatedSource) = await GeneratorTestHelper.RunGenerator(
+            source,
+            fileNames: new[] { "top.txt" },
+            subDirectoryFiles: new Dictionary<string, string[]> { { "sub", new[] { "nested.txt" } } });
+
+        Assert.NotNull(generatedSource);
+        Assert.Contains("Top", generatedSource);
+        Assert.Contains("public static class Sub", generatedSource);
+        Assert.Contains("Nested", generatedSource);
     }
 }

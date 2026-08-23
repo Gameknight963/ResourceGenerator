@@ -10,7 +10,8 @@ namespace ResourceLoader.Tests
         public static async Task<(ImmutableArray<Diagnostic> Diagnostics, string? GeneratedSource)> RunGenerator(
             string source,
             string[] fileNames,
-            string scanPath = "Resources")
+            string scanPath = "Resources",
+            Dictionary<string, string[]>? subDirectoryFiles = null)
         {
             string tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
             string resourceDir = Path.Combine(tempDir, scanPath);
@@ -18,6 +19,19 @@ namespace ResourceLoader.Tests
 
             try
             {
+                foreach (string fileName in fileNames)
+                    File.WriteAllText(Path.Combine(resourceDir, fileName), string.Empty);
+
+                if (subDirectoryFiles is not null)
+                {
+                    foreach (KeyValuePair<string, string[]> subDir in subDirectoryFiles)
+                    {
+                        string subDirPath = Path.Combine(resourceDir, subDir.Key);
+                        Directory.CreateDirectory(subDirPath);
+                        foreach (string fileName in subDir.Value)
+                            File.WriteAllText(Path.Combine(subDirPath, fileName), string.Empty);
+                    }
+                }
                 // Create dummy files
                 foreach (string fileName in fileNames)
                     File.WriteAllText(Path.Combine(resourceDir, fileName), string.Empty);
