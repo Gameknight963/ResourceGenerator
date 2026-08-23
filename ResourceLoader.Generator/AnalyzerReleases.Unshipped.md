@@ -15,3 +15,4 @@ RL0005 | ResourceLoader | Warning | Transitive loader
 RL0006 | ResourceLoader | Error | Runtime path member must be static
 RL0007 | ResourceLoader | Error | Runtime path member not found
 RL0008 | ResourceLoader | Error | Loader override required
+RL0009 | ResourceLoader | Error | Property name collision

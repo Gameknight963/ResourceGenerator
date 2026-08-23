@@ -414,10 +414,10 @@ public sealed class GeneratorTests
             source,
             fileNames: new[] { "foo.txt", "foo.json" });
 
-        // Should not emit duplicate properties
-        Assert.DoesNotContain("public static string Foo =>", generatedSource);
-        // Should emit a diagnostic explaining the collision
-        // (we don't have an RL code for this yet)
-        Assert.Contains(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        int occurrences = generatedSource!.Split("public static string Foo =>").Length - 1;
+        Assert.Equal(1, occurrences);
+
+        // should emit RL0009
+        Assert.Contains(diagnostics, d => d.Id == "RL0009");
     }
 }

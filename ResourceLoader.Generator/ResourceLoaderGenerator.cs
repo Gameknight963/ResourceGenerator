@@ -87,6 +87,14 @@ namespace ResourceLoader.Generator
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        private static readonly DiagnosticDescriptor PropertyNameCollision = new(
+            "RL0009",
+            "Property name collision",
+            "Files '{0}' and '{1}' both sanitize to the same property name '{2}'",
+            "ResourceLoader",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             IncrementalValuesProvider<INamedTypeSymbol> classSymbols = context
@@ -196,9 +204,11 @@ namespace ResourceLoader.Generator
             HashSet<string> usedLoaders = new();
             System.Text.StringBuilder properties = new();
 
+            Dictionary<string, string> usedPropertyNames = new(); // propertyName -> fileName
+
             foreach (string file in files)
             {
-                // skip dotfiles
+                // skip hidden files
                 if (Path.GetFileName(file).StartsWith(".")) continue;
 
                 string extension = Path.GetExtension(file).ToLowerInvariant();
@@ -206,6 +216,19 @@ namespace ResourceLoader.Generator
                 string fieldName = SanitizeName(fileName);
                 string backingFieldName = "_" + char.ToLower(fieldName[0]) + fieldName.Substring(1);
                 string fullFileName = Path.GetFileName(file);
+
+                if (usedPropertyNames.TryGetValue(fieldName, out string? existingFile))
+                {
+                    ctx.ReportDiagnostic(Diagnostic.Create(
+                        PropertyNameCollision,
+                        scanPathLocation,
+                        existingFile,
+                        fullFileName,
+                        fieldName));
+                    continue;
+                }
+
+                usedPropertyNames[fieldName] = fullFileName;
 
                 // Try specific extension first, then wildcard
                 if (!loaderMap.TryGetValue(extension, out LoaderInfo? loader))
